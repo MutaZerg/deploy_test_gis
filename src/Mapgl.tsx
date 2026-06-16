@@ -105,7 +105,7 @@ export default function Mapgl() {
                     iconWidth: 15,
                     iconPriority: 100,
                     textField: ['get', 'weather'],
-                    textFont: ['Helvetica'],
+                    textFont: 'Helvetica',
                     textColor: '#202020',
                     textHaloColor: '#fff',
                     textHaloWidth: 1,
