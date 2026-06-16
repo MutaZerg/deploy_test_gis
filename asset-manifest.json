@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/deploy_test_gis/static/css/main.7f4dc822.css",
+    "main.js": "/deploy_test_gis/static/js/main.b8ea4341.js",
+    "index.html": "/deploy_test_gis/index.html",
+    "main.7f4dc822.css.map": "/deploy_test_gis/static/css/main.7f4dc822.css.map",
+    "main.b8ea4341.js.map": "/deploy_test_gis/static/js/main.b8ea4341.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.7f4dc822.css",
+    "static/js/main.b8ea4341.js"
+  ]
+}
