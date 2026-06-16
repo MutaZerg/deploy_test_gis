@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { load } from '@2gis/mapgl';
 import { useMapglContext } from './MapglContext';
 import { Clusterer } from '@2gis/mapgl-clusterer';
@@ -7,14 +7,21 @@ import { Directions } from '@2gis/mapgl-directions';
 import { useControlRotateClockwise } from './useControlRotateClockwise';
 import { ControlRotateCounterclockwise } from './ControlRotateConterclockwise';
 import { MapWrapper } from './MapWrapper';
-import { FeatureCollection, Geometry, GeoJsonProperties } from
+import { Feature, Polygon, Point, MultiPolygon, FeatureCollection, Geometry, GeoJsonProperties } from
 'geojson';
+import { point } from '@turf/helpers'; 
+import { buffer } from "@turf/buffer";
+import dissolve from '@turf/dissolve';  
+import intersect from '@turf/intersect';
 import geoData from './data/kaliningradskaia-oblast_xaaaa.json';
 
 export const MAP_CENTER = [20.509039, 54.706602];
 
 export default function Mapgl() {
     const { setMapglContext } = useMapglContext();
+    
+    const [bufferedFeatures, setBufferedFeatures] = useState<FeatureCollection | null>(null);
+    const [intersectionFeatures, setIntersectionFeatures] = useState<FeatureCollection | null>(null);
 
     // const layer = 
 
@@ -22,6 +29,8 @@ export default function Mapgl() {
         let map: mapgl.Map | undefined = undefined;
         let directions: Directions | undefined = undefined;
         let clusterer: Clusterer | undefined = undefined;
+        let bufferSource: mapgl.GeoJsonSource | undefined = undefined;
+        const centerSource: mapgl.GeoJsonSource | undefined = undefined;
 
         load().then((mapgl) => {
             map = new mapgl.Map('map-container', {
@@ -43,7 +52,123 @@ export default function Mapgl() {
                     },
                 });
 
+            const pointFeatures = data.features.filter(
+                    (f) => f.geometry.type === 'Point'
+                ) as Feature<Point>[];
+
+            const radius = 300;
+            const bufferOptions = { units: 'meters' as const };
+
+            const bufferedPolygons = pointFeatures
+                .map((point) => {
+                try {
+                    return buffer(point, radius, bufferOptions);
+                } catch (e) { return null; }
+                })
+                .filter((b) => b !== null) as Feature<Polygon | MultiPolygon>[];
             
+            let dissolvedFeatures: Feature<Polygon | MultiPolygon>[] = [];
+            if (bufferedPolygons.length > 0) {
+                const collection: FeatureCollection<Polygon | MultiPolygon> = {
+                type: 'FeatureCollection',
+                features: bufferedPolygons,
+                };
+                try {
+                    const result = dissolve(collection as any) as FeatureCollection<Polygon | MultiPolygon> | null;
+                    if (result && result.features.length > 0) {
+                        dissolvedFeatures = result.features;
+                    }
+                } catch (e) {
+                    console.warn('Dissolve error:', e);
+                }
+            }
+
+
+
+            const centerPoint = point(MAP_CENTER);
+            const centerBuffer = buffer(centerPoint, 1000, { units: 'meters' });
+            const centerSource = new mapgl.GeoJsonSource(map, {
+                data: centerBuffer as any,
+            });
+
+            if (centerBuffer) {
+            // Добавляем слой буфера центра
+            const centerSource = new mapgl.GeoJsonSource(map, {
+                data: centerBuffer as any,attributes: {
+                    visible: true, // Уникальное свойство
+                    },
+            });
+            map.on(
+                'styleload', ()=>{map?.addLayer({
+                id: 'center-buffer-layer',
+                type: 'polygon',
+                filter: [
+                        'match',
+                        ['sourceAttr', 'visible'],
+                        [true],
+                        true,
+                        false, 
+                        ],
+                style: {
+                    color: 'rgba(0, 255, 21, 0.4)',
+                    strokeColor: '#000000',
+                    strokeWidth: 2,
+                },
+            });
+            });}
+
+            const centerBuffer2 =   centerBuffer as Feature<Polygon>;
+            
+
+            let intersectionWithCenter: Feature<Polygon | MultiPolygon>[] = [];
+            if (centerBuffer && bufferedPolygons.length > 0) {
+            bufferedPolygons.forEach((feature) => {
+                try {
+                const inter = intersect(centerBuffer2, feature);
+                if (inter) {
+                    intersectionWithCenter.push(inter as Feature<Polygon | MultiPolygon>);
+                }
+                } catch (e) {
+                console.warn('Intersection with center failed', e);
+                }
+            });
+            }
+
+
+
+            // console.log(dissolvedFeatures)
+            if (dissolvedFeatures.length > 0 || true) {
+                bufferSource = new mapgl.GeoJsonSource(map, {
+                data: {
+                    type: 'FeatureCollection',
+                    features: intersectionWithCenter,
+                },attributes: {
+                    visible: true, // Уникальное свойство
+                    },
+                });
+                map.on(
+                'styleload', ()=>{map?.addLayer({
+                id: 'merged-buffers-layer',
+                                        filter: [
+                        'match',
+                        ['sourceAttr', 'visible'],
+                        [true],
+                        true,
+                        false, 
+                        ],
+                type: 'polygon',
+                style: {
+                    color: 'rgba(0, 4, 255, 0.4)',
+                    strokeColor: '#000000',
+                    strokeWidth: 2,
+                },
+                });})
+            }
+            
+
+
+
+
             map.on(
                 'styleload', ()=>{
                     map?.addLayer({
@@ -113,6 +238,7 @@ export default function Mapgl() {
                 },
                 });
             });
+
 
             /**
              * Ruler  plugin
